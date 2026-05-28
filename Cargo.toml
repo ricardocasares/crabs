@@ -1,24 +1,56 @@
 [workspace]
 resolver = "3"
-members = ["crates/better-auth-poem", "crates/vercel-poem", "examples/sqlx-custom-entities"]
+members = [
+    "crates/better-auth-poem",
+    "crates/vercel-poem",
+    # examples are workspace members so their tests run under `cargo test --workspace`
+    # but are excluded from `cargo publish` via `publish = false` in their Cargo.toml
+    "examples/sqlx-custom-entities",
+]
 exclude = [".repos"]
 
+# Shared metadata inherited by crates via `field.workspace = true`.
+# Each crate still sets its own `name`, `version`, `description`, and `keywords`.
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ricardocasares/rustelix"
+# Minimum Rust version enforced by CI.  Edition 2024 requires >= 1.85.
+rust-version = "1.85"
+
 [workspace.dependencies]
+# Internal crates
+vercel-poem = { path = "crates/vercel-poem" }
+
+# Poem ecosystem
 poem = "3.1"
 poem-openapi = { version = "5.1", features = ["scalar", "cookie"] }
+
+# Vercel
+vercel_runtime = "2"
+
+# better-auth
 better-auth = { version = "0.10", default-features = false, features = ["rustls"] }
 better-auth-core = "0.10"
-vercel_runtime = "2"
-vercel-poem = { path = "crates/vercel-poem" }
+
+# HTTP primitives
 hyper = { version = "1", features = ["full"] }
 http-body = "1"
 http-body-util = "0.1"
 bytes = "1"
+sync_wrapper = { version = "1", features = ["futures"] }
+
+# Async
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
-sync_wrapper = { version = "1", features = ["futures"] }
+
+# Serialisation
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tracing = "0.1"
+
+# Database (only needed by crates that opt in)
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
 chrono = { version = "0.4", features = ["serde"] }
+
+# Observability
+tracing = "0.1"
