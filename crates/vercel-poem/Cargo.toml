@@ -1,0 +1,24 @@
+[package]
+name = "vercel-poem"
+version = "0.1.0"
+edition = "2024"
+description = "Run Poem applications on the Vercel Rust runtime"
+license = "MIT OR Apache-2.0"
+keywords = ["vercel", "poem", "serverless", "runtime", "http"]
+categories = ["web-programming::http-server", "web-programming"]
+# repository = "https://github.com/<you>/<repo>"   # TODO: set before publishing
+# readme = "README.md"                              # TODO: add a README
+
+[dependencies]
+poem = { workspace = true }
+vercel_runtime = { workspace = true }
+hyper = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+bytes = { workspace = true }
+tokio-stream = { workspace = true }
+sync_wrapper = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+http-body-util = { workspace = true }

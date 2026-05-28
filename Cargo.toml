@@ -1,0 +1,24 @@
+[workspace]
+resolver = "3"
+members = ["crates/better-auth-poem", "crates/vercel-poem", "examples/sqlx-custom-entities"]
+exclude = [".repos"]
+
+[workspace.dependencies]
+poem = "3.1"
+poem-openapi = { version = "5.1", features = ["scalar", "cookie"] }
+better-auth = { version = "0.10", default-features = false, features = ["rustls"] }
+better-auth-core = "0.10"
+vercel_runtime = "2"
+vercel-poem = { path = "crates/vercel-poem" }
+hyper = { version = "1", features = ["full"] }
+http-body = "1"
+http-body-util = "0.1"
+bytes = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+sync_wrapper = { version = "1", features = ["futures"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
+chrono = { version = "0.4", features = ["serde"] }

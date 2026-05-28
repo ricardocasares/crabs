@@ -1,0 +1,24 @@
+[package]
+name = "better-auth-poem"
+version = "0.1.0"
+edition = "2024"
+description = "Poem framework integration for better-auth-rs"
+license = "MIT OR Apache-2.0"
+keywords = ["better-auth", "poem", "authentication", "session", "auth"]
+categories = ["authentication", "web-programming"]
+# repository = "https://github.com/<you>/<repo>"   # TODO: set before publishing
+# readme = "README.md"                              # TODO: add a README
+
+[dependencies]
+poem = { workspace = true }
+better-auth = { workspace = true }
+better-auth-core = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+poem = { workspace = true, features = ["test"] }
+poem-openapi = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
