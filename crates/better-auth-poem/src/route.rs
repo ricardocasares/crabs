@@ -11,14 +11,26 @@ use crate::convert;
 ///
 /// Mirrors the upstream `AxumIntegration::axum_router` shape. Typical usage:
 ///
-/// ```rust,ignore
+/// ```rust,no_run
+/// use better_auth::adapters::MemoryDatabaseAdapter;
+/// use better_auth::{AuthBuilder, AuthConfig};
 /// use better_auth_poem::PoemIntegration;
-/// use poem::{middleware::AddData, Route};
+/// use poem::{EndpointExt, Route};
+/// use std::sync::Arc;
 ///
-/// let auth = std::sync::Arc::new(auth);
+/// # async fn example() {
+/// let auth = Arc::new(
+///     AuthBuilder::new(AuthConfig::new("secret-key-that-is-at-least-32-chars"))
+///         .database(MemoryDatabaseAdapter::new())
+///         .build()
+///         .await
+///         .unwrap(),
+/// );
+///
 /// let app = Route::new()
 ///     .nest("/api/auth", auth.clone().poem_route())
-///     .with(AddData::new(auth));
+///     .data(auth);
+/// # }
 /// ```
 ///
 /// [`AddData`](poem::middleware::AddData) is required so [`CurrentSession`] /

@@ -14,14 +14,14 @@
 //! `Content-Type` is `text/event-stream` are forwarded lazily as a stream (so
 //! SSE works) without being collected into memory.
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use poem::{get, handler, Route};
 //!
 //! #[handler]
 //! fn hello() -> &'static str { "Hello from Poem on Vercel!" }
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<(), vercel_runtime::Error> {
+//! async fn main() -> Result<(), vercel_poem::Error> {
 //!     let app = Route::new().at("/", get(hello));
 //!     vercel_poem::run(app).await
 //! }
