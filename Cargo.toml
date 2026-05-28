@@ -6,6 +6,7 @@ members = [
     # examples are workspace members so their tests run under `cargo test --workspace`
     # but are excluded from `cargo publish` via `publish = false` in their Cargo.toml
     "examples/sqlx-custom-entities",
+    "examples/openapi-hello-world",
 ]
 
 # Shared metadata inherited by crates via `field.workspace = true`.
@@ -54,3 +55,9 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Observability
 tracing = "0.1"
+
+# Optimise release builds (applies to all workspace members, including Vercel deploys).
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3

@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/index.rs": {
+      "runtime": "vercel-rust@latest"
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/index" }
+  ]
+}
