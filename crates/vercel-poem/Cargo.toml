@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Run Poem applications on the Vercel Rust runtime"
+readme = "README.md"
 keywords = ["vercel", "poem", "serverless", "runtime", "http"]
 categories = ["web-programming::http-server", "web-programming"]
 

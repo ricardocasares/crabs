@@ -48,11 +48,21 @@ use sqlx::postgres::PgPool;
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// Connect to PostgreSQL and apply the schema migration (idempotent).
+///
+/// An advisory lock (key `0x6372616273`) serialises concurrent callers so
+/// that parallel test processes cannot race on `CREATE TABLE IF NOT EXISTS`.
 pub async fn connect_and_migrate(database_url: &str) -> Result<PgPool, BoxError> {
     let pool = PgPool::connect(database_url).await?;
-    sqlx::raw_sql(include_str!("../migrations/001_init.sql"))
+    sqlx::query("SELECT pg_advisory_lock(0x6372616273)")
         .execute(&pool)
         .await?;
+    let result = sqlx::raw_sql(include_str!("../migrations/001_init.sql"))
+        .execute(&pool)
+        .await;
+    sqlx::query("SELECT pg_advisory_unlock(0x6372616273)")
+        .execute(&pool)
+        .await?;
+    result?;
     Ok(pool)
 }
 

@@ -8,6 +8,7 @@
 //! via `/api/me`, and `SaasOrganization` / `SaasMember` / `SaasInvitation` via
 //! the organization endpoints.
 
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -20,10 +21,53 @@ use sqlx_custom_entities::{build_app, build_auth, connect_and_migrate};
 
 type App = BoxEndpoint<'static, Response>;
 
+// ---------------------------------------------------------------------------
+// Shared setup — migrate exactly once per test binary via a std::sync::OnceLock
+// so that concurrent #[tokio::test]s don't race on CREATE TABLE.
+// Each test then gets its own BetterAuth instance (and its own pool connection)
+// so there's no shared mutable state between parallel tests.
+// ---------------------------------------------------------------------------
+
+static DB_URL: OnceLock<String> = OnceLock::new();
+
+/// Ensure the schema is migrated and return the DATABASE_URL, or `None` if
+/// the var is unset (skip signal).
+async fn ensure_migrated() -> Option<String> {
+    let Ok(database_url) = std::env::var("DATABASE_URL") else {
+        return None;
+    };
+    // Run migrations exactly once; all other callers skip straight through.
+    if DB_URL.get().is_none() {
+        // Only the first caller actually migrates; the rest see the OnceLock set.
+        let pool = connect_and_migrate(&database_url)
+            .await
+            .expect("connect + migrate");
+        drop(pool); // migration done; each test opens its own pool
+        let _ = DB_URL.set(database_url.clone());
+    }
+    Some(database_url)
+}
+
+/// Build a fresh, independent Poem app for each test.  The schema is already
+/// in place from `ensure_migrated()`, so `connect_and_migrate` is idempotent
+/// (all CREATE TABLE IF NOT EXISTS are no-ops on the second call).
+async fn setup() -> Option<TestClient<App>> {
+    let database_url = ensure_migrated().await?;
+    let pool = connect_and_migrate(&database_url)
+        .await
+        .expect("connect pool");
+    let auth = build_auth(pool).await.expect("build auth");
+    Some(TestClient::new(build_app(auth)))
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Process-unique suffix, so repeated/parallel runs against the same database
-/// never collide on unique columns (email, org slug).
+/// Process-unique suffix so parallel runs against the same database never
+/// collide on unique columns (email, org slug).
 fn unique(prefix: &str) -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -39,20 +83,6 @@ fn unique_email() -> String {
 
 fn bearer(token: &str) -> String {
     format!("Bearer {token}")
-}
-
-/// Connect, migrate, and build the Poem app — or `None` (with a printed note)
-/// when `DATABASE_URL` is unset, so the test skips gracefully.
-async fn setup() -> Option<TestClient<App>> {
-    let Ok(database_url) = std::env::var("DATABASE_URL") else {
-        eprintln!("DATABASE_URL not set — skipping SQLx E2E test");
-        return None;
-    };
-    let pool = connect_and_migrate(&database_url)
-        .await
-        .expect("connect + migrate");
-    let auth = build_auth(pool).await.expect("build auth");
-    Some(TestClient::new(build_app(auth)))
 }
 
 /// Sign up a fresh user and return its session token.
@@ -124,9 +154,16 @@ async fn accept<E: Endpoint>(client: &TestClient<E>, token: &str, invitation_id:
         .assert_status_is_ok();
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 #[tokio::test]
 async fn e2e_signup_and_me_with_custom_entities() {
-    let Some(client) = setup().await else { return };
+    let Some(client) = setup().await else {
+        eprintln!("DATABASE_URL not set — skipping SQLx E2E test");
+        return;
+    };
 
     let email = unique_email();
     let token = sign_up(&client, &email).await;
@@ -153,7 +190,9 @@ async fn e2e_signup_and_me_with_custom_entities() {
 
 #[tokio::test]
 async fn e2e_create_organization_persists_custom_org_and_owner_member() {
-    let Some(client) = setup().await else { return };
+    let Some(client) = setup().await else {
+        return;
+    };
 
     let token = sign_up(&client, &unique_email()).await;
     let slug = unique("acme");
@@ -167,34 +206,33 @@ async fn e2e_create_organization_persists_custom_org_and_owner_member() {
     resp.assert_status_is_ok();
     let body = resp.json().await;
 
-    // SaasOrganization custom entity: slug round-trips and the `plan` column
-    // defaults to "free".
     body.value().object().get("slug").assert_string(&slug);
     body.value().object().get("plan").assert_string("free");
     body.value().object().get("id").assert_not_null();
 
-    // The creator is persisted as a SaasMember with the default owner role.
     let members = body.value().object().get("members").array();
     members.assert_len(1);
     members.get(0).object().get("role").assert_string("owner");
     members.get(0).object().get("userId").assert_not_null();
 
-    // The org shows up in the user's organization list.
     let resp = client
         .get("/auth/organization/list")
         .header("authorization", bearer(&token))
         .send()
         .await;
     resp.assert_status_is_ok();
-    let body = resp.json().await;
-    body.value()
+    resp.json()
+        .await
+        .value()
         .array()
         .assert_contains(|org| org.object().get("slug").string() == slug.as_str());
 }
 
 #[tokio::test]
 async fn e2e_list_members_returns_owner() {
-    let Some(client) = setup().await else { return };
+    let Some(client) = setup().await else {
+        return;
+    };
 
     let token = sign_up(&client, &unique_email()).await;
     let org_id = create_org(&client, &token, &unique("acme")).await;
@@ -221,13 +259,14 @@ async fn e2e_list_members_returns_owner() {
 
 #[tokio::test]
 async fn e2e_invite_member_and_list_invitations() {
-    let Some(client) = setup().await else { return };
+    let Some(client) = setup().await else {
+        return;
+    };
 
     let token = sign_up(&client, &unique_email()).await;
     let org_id = create_org(&client, &token, &unique("acme")).await;
     let invitee = unique_email();
 
-    // Invite — persists a SaasInvitation (custom entity) with status "pending".
     let resp = client
         .post("/auth/organization/invite-member")
         .header("authorization", bearer(&token))
@@ -240,7 +279,6 @@ async fn e2e_invite_member_and_list_invitations() {
     body.value().object().get("role").assert_string("member");
     body.value().object().get("status").assert_string("pending");
 
-    // The invitation is listed for the organization.
     let resp = client
         .get("/auth/organization/list-invitations")
         .query("organizationId", &org_id)
@@ -248,23 +286,24 @@ async fn e2e_invite_member_and_list_invitations() {
         .send()
         .await;
     resp.assert_status_is_ok();
-    let body = resp.json().await;
-    body.value()
+    resp.json()
+        .await
+        .value()
         .array()
         .assert_contains(|inv| inv.object().get("email").string() == invitee.as_str());
 }
 
 #[tokio::test]
 async fn e2e_accept_invitation_creates_member() {
-    let Some(client) = setup().await else { return };
+    let Some(client) = setup().await else {
+        return;
+    };
 
-    // Owner creates an org and invites a new user by email.
     let owner_token = sign_up(&client, &unique_email()).await;
     let org_id = create_org(&client, &owner_token, &unique("acme")).await;
     let invitee_email = unique_email();
     let invitation_id = invite(&client, &owner_token, &org_id, &invitee_email).await;
 
-    // The invitee signs up under the invited email, then accepts the invitation.
     let invitee_token = sign_up(&client, &invitee_email).await;
     let resp = client
         .post("/auth/organization/accept-invitation")
@@ -275,7 +314,6 @@ async fn e2e_accept_invitation_creates_member() {
     resp.assert_status_is_ok();
     let body = resp.json().await;
 
-    // The invitation flips to "accepted" and a SaasMember row is created for the invitee.
     body.value()
         .object()
         .get("invitation")
@@ -295,7 +333,6 @@ async fn e2e_accept_invitation_creates_member() {
         .get("userId")
         .assert_not_null();
 
-    // The organization now has two members (owner + invitee).
     let resp = client
         .get("/auth/organization/list-members")
         .query("organizationId", &org_id)
@@ -308,7 +345,6 @@ async fn e2e_accept_invitation_creates_member() {
         "expected owner + invitee as members"
     );
 
-    // The invitation is no longer pending in the org's listing.
     let resp = client
         .get("/auth/organization/list-invitations")
         .query("organizationId", &org_id)
@@ -324,7 +360,9 @@ async fn e2e_accept_invitation_creates_member() {
 
 #[tokio::test]
 async fn e2e_accepted_member_sees_organization() {
-    let Some(client) = setup().await else { return };
+    let Some(client) = setup().await else {
+        return;
+    };
 
     let owner_token = sign_up(&client, &unique_email()).await;
     let slug = unique("acme");
@@ -334,7 +372,6 @@ async fn e2e_accepted_member_sees_organization() {
     let invitation_id = invite(&client, &owner_token, &org_id, &invitee_email).await;
     let invitee_token = sign_up(&client, &invitee_email).await;
 
-    // Before accepting, the invitee belongs to no organizations.
     let resp = client
         .get("/auth/organization/list")
         .header("authorization", bearer(&invitee_token))
@@ -345,8 +382,6 @@ async fn e2e_accepted_member_sees_organization() {
 
     accept(&client, &invitee_token, &invitation_id).await;
 
-    // After accepting, the organization is visible to the invitee, including its
-    // custom SaasOrganization columns.
     let resp = client
         .get("/auth/organization/list")
         .header("authorization", bearer(&invitee_token))
@@ -362,13 +397,14 @@ async fn e2e_accepted_member_sees_organization() {
 
 #[tokio::test]
 async fn e2e_accept_invitation_with_wrong_email_is_forbidden() {
-    let Some(client) = setup().await else { return };
+    let Some(client) = setup().await else {
+        return;
+    };
 
     let owner_token = sign_up(&client, &unique_email()).await;
     let org_id = create_org(&client, &owner_token, &unique("acme")).await;
     let invitation_id = invite(&client, &owner_token, &org_id, &unique_email()).await;
 
-    // A different user (not the invited email) tries to accept.
     let intruder_token = sign_up(&client, &unique_email()).await;
     let resp = client
         .post("/auth/organization/accept-invitation")
@@ -381,9 +417,10 @@ async fn e2e_accept_invitation_with_wrong_email_is_forbidden() {
 
 #[tokio::test]
 async fn e2e_non_owner_member_cannot_invite() {
-    let Some(client) = setup().await else { return };
+    let Some(client) = setup().await else {
+        return;
+    };
 
-    // Owner sets up the org and admits a plain member.
     let owner_token = sign_up(&client, &unique_email()).await;
     let org_id = create_org(&client, &owner_token, &unique("acme")).await;
     let member_email = unique_email();
@@ -391,7 +428,6 @@ async fn e2e_non_owner_member_cannot_invite() {
     let member_token = sign_up(&client, &member_email).await;
     accept(&client, &member_token, &invitation_id).await;
 
-    // A "member"-role user has no invitation-create permission → 403.
     let resp = client
         .post("/auth/organization/invite-member")
         .header("authorization", bearer(&member_token))
