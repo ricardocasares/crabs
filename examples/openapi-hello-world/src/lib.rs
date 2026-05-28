@@ -110,7 +110,7 @@ pub fn build_app() -> impl poem::Endpoint {
         .description(
             "A minimal Poem + poem-openapi application running on the Vercel Rust runtime.",
         )
-        .server("http://localhost:3000");
+        .server("/api");
 
     let ui = service.scalar();
     let spec = service.spec_endpoint();
@@ -118,5 +118,5 @@ pub fn build_app() -> impl poem::Endpoint {
     Route::new()
         .nest("/docs", ui)
         .at("/spec.json", spec)
-        .nest("/", service)
+        .nest("/api", service)
 }

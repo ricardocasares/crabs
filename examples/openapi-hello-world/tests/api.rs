@@ -7,7 +7,7 @@ fn client() -> TestClient<impl poem::Endpoint> {
 
 #[tokio::test]
 async fn hello_defaults_to_world() {
-    let resp = client().get("/hello").send().await;
+    let resp = client().get("/api/hello").send().await;
     resp.assert_status_is_ok();
     let body = resp.json().await;
     body.value()
@@ -19,7 +19,11 @@ async fn hello_defaults_to_world() {
 
 #[tokio::test]
 async fn hello_greets_provided_name() {
-    let resp = client().get("/hello").query("name", &"Alice").send().await;
+    let resp = client()
+        .get("/api/hello")
+        .query("name", &"Alice")
+        .send()
+        .await;
     resp.assert_status_is_ok();
     let body = resp.json().await;
     body.value()
@@ -31,7 +35,7 @@ async fn hello_greets_provided_name() {
 
 #[tokio::test]
 async fn health_returns_ok() {
-    let resp = client().get("/health").send().await;
+    let resp = client().get("/api/health").send().await;
     resp.assert_status_is_ok();
     let body = resp.json().await;
     body.value().object().get("status").assert_string("ok");
