@@ -7,14 +7,13 @@ members = [
     # but are excluded from `cargo publish` via `publish = false` in their Cargo.toml
     "examples/sqlx-custom-entities",
 ]
-exclude = [".repos"]
 
 # Shared metadata inherited by crates via `field.workspace = true`.
 # Each crate still sets its own `name`, `version`, `description`, and `keywords`.
 [workspace.package]
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/ricardocasares/rustelix"
+repository = "https://github.com/ricardocasares/crabs"
 # Minimum Rust version enforced by CI.  Edition 2024 requires >= 1.85.
 rust-version = "1.85"
 
