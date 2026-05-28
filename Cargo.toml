@@ -14,8 +14,9 @@ members = [
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ricardocasares/crabs"
-# Minimum Rust version enforced by CI.  Edition 2024 requires >= 1.85.
-rust-version = "1.85"
+# Minimum Rust version enforced by CI.
+# Edition 2024 requires >= 1.85; time@0.3.47 (via sqlx) requires >= 1.88.
+rust-version = "1.88"
 
 [workspace.dependencies]
 # Internal crates

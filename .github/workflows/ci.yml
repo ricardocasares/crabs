@@ -69,11 +69,11 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/better_auth_poem_example
 
   msrv:
-    name: MSRV (1.85)
+    name: MSRV (1.88)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.88
       - uses: Swatinem/rust-cache@v2
       # Only check the publishable crates — examples can use newer features
       - run: cargo check -p better-auth-poem -p vercel-poem
